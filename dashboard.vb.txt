@@ -1,0 +1,57 @@
+ 
+Imports System.Web.Services
+Imports System.Data.SqlClient
+Imports System.Web.Script.Serialization
+
+Partial Class Dashboard
+    Inherits System.Web.UI.Page
+
+    <WebMethod()>
+    Public Shared Function GetChartData(year As String, quarter As String) As List(Of Dictionary(Of String, Object))
+        Dim connStr As String = "your_connection_string"
+        Dim chartData As New List(Of Dictionary(Of String, Object))()
+
+        Dim query As String
+        Dim cmd As New SqlCommand()
+
+        If String.IsNullOrEmpty(year) OrElse String.IsNullOrEmpty(quarter) Then
+            ' Default last 12 months
+            query = "
+                SELECT FORMAT(created_date, 'MMMM yyyy') AS month_year, COUNT(id) AS total_count
+                FROM your_table_name
+                WHERE created_date >= DATEADD(MONTH, -11, DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1))
+                GROUP BY FORMAT(created_date, 'MMMM yyyy')
+                ORDER BY MIN(created_date);"
+        Else
+            ' Filter by year and quarter
+            query = "
+                DECLARE @startMonth INT = (3 * (@quarter - 1)) + 1;
+                DECLARE @endMonth INT = 3 * @quarter;
+
+                SELECT FORMAT(created_date, 'MMMM yyyy') AS month_year, COUNT(id) AS total_count
+                FROM your_table_name
+                WHERE YEAR(created_date) = @year AND MONTH(created_date) BETWEEN @startMonth AND @endMonth
+                GROUP BY FORMAT(created_date, 'MMMM yyyy')
+                ORDER BY MIN(created_date);"
+
+            cmd.Parameters.AddWithValue("@year", Convert.ToInt32(year))
+            cmd.Parameters.AddWithValue("@quarter", Convert.ToInt32(quarter))
+        End If
+
+        Using conn As New SqlConnection(connStr)
+            cmd.Connection = conn
+            cmd.CommandText = query
+            cmd.CommandType = CommandType.Text
+            conn.Open()
+            Dim reader As SqlDataReader = cmd.ExecuteReader()
+            While reader.Read()
+                Dim row As New Dictionary(Of String, Object)
+                row("month_year") = reader("month_year").ToString()
+                row("total_count") = Convert.ToInt32(reader("total_count"))
+                chartData.Add(row)
+            End While
+        End Using
+
+        Return chartData
+    End Function
+End Class
